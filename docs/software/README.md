@@ -161,4 +161,188 @@ SET UNIQUE_CHECKS=@OLD_UNIQUE_CHECKS;
 
 ## RESTfull сервіс для управління даними
 
+### appsettings.json
+```json
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Server=localhost;Port=3306;Database=mcas;Uid=root;Pwd=12345;"
+  },
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning"
+    }
+  },
+  "AllowedHosts": "*"
+}
+```
 
+### Program.cs
+```csharp
+using Microsoft.EntityFrameworkCore;
+using DB.Data;
+
+var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddDbContext<AplicationDbContext>(options =>
+    options.UseMySql(builder.Configuration.GetConnectionString("DefaultConnection"), new MySqlServerVersion(new Version(8,0,37))));
+
+builder.Services.AddControllers();
+
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
+
+var app = builder.Build();
+
+// Configure the HTTP request pipeline.
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
+
+app.UseHttpsRedirection();
+app.MapControllers();
+
+app.Run();
+```
+
+### Data
+#### AplicationDbContext.cs
+```csharp
+using Microsoft.EntityFrameworkCore;
+using System.Data;
+using DB.Model;
+
+
+namespace DB.Data
+{
+    public class AplicationDbContext : DbContext
+    {
+        public AplicationDbContext(DbContextOptions<AplicationDbContext> options) : base(options)
+        {
+
+        }
+
+        public DbSet<User> Users { get; set; }
+        public DbSet<role> Roles { get; set; }
+    }
+}
+```
+
+### Controllers
+#### UserController
+```csharp
+using DB.Data;
+using DB.Model;
+using Microsoft.AspNetCore.Mvc;
+using System.ComponentModel.DataAnnotations;
+using System.Configuration;
+
+namespace DB.Controllers
+{
+    [ApiController]
+    [Route("api/[controller]")]
+    public class UserController : ControllerBase
+    {
+        private readonly AplicationDbContext _db;
+
+        public UserController(AplicationDbContext db)
+        {
+            _db = db;
+        }
+
+        [HttpPost("Registration")]
+        public async Task<IActionResult> Registration([FromBody] UserDTO regUserDto)
+        {
+            var user = new User(regUserDto.email, regUserDto.password);
+
+            Random rand = new Random();
+
+            var x = rand.Next(1, 4);
+
+            user.roleId = x;
+
+            var testUserEmail = _db.Users.FirstOrDefault(u => u.Email == user.Email);
+
+            if (testUserEmail != null)
+            {
+                return BadRequest("User with this email already exists.");
+            }
+
+            await _db.Users.AddAsync(user);
+            await _db.SaveChangesAsync();
+
+            return Ok("Registered successfully.");
+        }
+
+        [HttpGet("Get all users")]
+        public async Task<IActionResult> GetAllUsers()
+        {
+            var users = _db.Users;
+
+            return Ok(users);
+        }
+    }
+}
+```
+
+### Model
+#### role.cs
+```csharp
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
+
+namespace DB.Model
+{
+    public class role
+    {
+        [Key]
+        public int id { get; set; }
+        public string name { get; set; }
+        public string description { get; set; }
+    }
+}
+```
+
+#### User.cs
+```csharp
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
+
+namespace DB.Model
+{
+    public class User
+    {
+        [Key]
+        public int Id { get; set; }
+        public string Email { get; set; }
+        public string Password { get; set; }
+        public int roleId { get; set; }
+        [ForeignKey("roleId")]
+        public role role_id { get; set; }
+        public User(string email, string password)
+        {
+            this.Email = email;
+            this.Password = password;
+        }
+    }
+}
+```
+
+#### UserDTO.cs
+```csharp
+using Microsoft.AspNetCore.Mvc;
+using System.ComponentModel.DataAnnotations;
+
+namespace DB.Model
+{
+    public class UserDTO
+    {
+        [Required]
+        public string email { get; set; }
+        [Required]
+        public string password { get; set; }
+    }
+}
+```
